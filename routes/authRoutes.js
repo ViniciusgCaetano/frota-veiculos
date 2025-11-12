@@ -1,9 +1,13 @@
 import express from 'express';
-import { login } from '../controllers/authController.js';
+import { login, validarToken, seedAdmin } from '../controllers/authController.js';
+import authMiddleware from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// POST /api/v1/auth/login - Autenticação de usuário
 router.post('/login', login);
+router.post('/seed-admin', seedAdmin);
+
+// rota para o front recuperar o usuário completo depois
+router.get('/validar', authMiddleware, validarToken);
 
 export default router;

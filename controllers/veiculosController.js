@@ -1,186 +1,111 @@
 import Veiculo from '../models/Veiculo.js';
+import Auditoria from '../models/Auditoria.js';
 
-const getAllVeiculos = async (req, res) => {
+const AuditAction = Object.freeze({
+  CRIAR: 'VEICULO_CRIAR',
+  ATUALIZAR: 'VEICULO_ATUALIZAR',
+  EXCLUIR: 'VEICULO_EXCLUIR'
+});
+
+// Criar veículo
+export const createVeiculo = async (req, res) => {
   try {
-    const { 
-      tipo, combustivel, portas_min, status, placa, fabricante, modelo,
-      page = 1, limit = 10 
-    } = req.query;
+    const veic = await Veiculo.create(req.body);
 
-    // Construir filtro
-    const filter = {};
-    if (tipo) filter.idTipoVeic = tipo;
-    if (combustivel) filter.idCombVeic = combustivel;
-    if (portas_min) filter.qtdPortaVeic = { $gte: parseInt(portas_min) };
-    if (status) filter.indStatVeic = status;
-    if (placa) filter.numPlacaVeic = { $regex: placa, $options: 'i' };
-    if (fabricante) filter.dscFabrcVeic = { $regex: fabricante, $options: 'i' };
-    if (modelo) filter.dscModelVeic = { $regex: modelo, $options: 'i' };
-
-    const veiculos = await Veiculo.find(filter)
-      .sort({ datCriVeic: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
-
-    const total = await Veiculo.countDocuments(filter);
-
-    res.json({
-      veiculos,
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit))
+    await Auditoria.create({
+      idUsuarAudit: req.user.userId,
+      idEntidAudit: veic._id,
+      dscTipoEntidAudit: 'Veiculo',
+      dscAcaoAudit: AuditAction.CRIAR,
+      dscDetalAudit: `Veículo ${veic.dscModelVeic} criado.`,
+      indResultAudit: 'sucesso'
     });
 
+    res.status(201).json(veic);
   } catch (error) {
-    console.error('Erro ao buscar veículos:', error);
-    res.status(500).json({ erro: 'Erro interno do servidor' });
+    console.error('Erro ao criar veículo:', error);
+    await Auditoria.create({
+      idUsuarAudit: req.user?.userId,
+      dscTipoEntidAudit: 'Veiculo',
+      dscAcaoAudit: AuditAction.CRIAR,
+      dscDetalAudit: error.message,
+      indResultAudit: 'erro'
+    });
+    res.status(500).json({ erro: 'Erro ao criar veículo.' });
   }
 };
 
-const getVeiculo = async (req, res) => {
+// Listar veículos
+export const getVeiculos = async (req, res) => {
   try {
-    const { id } = req.params;
-    const veiculo = await Veiculo.findById(id);
-    
-    if (!veiculo) {
-      return res.status(404).json({ erro: 'Veículo não encontrado' });
-    }
+    const veiculos = await Veiculo.find().sort({ datCriVeic: -1 });
+    res.json(veiculos);
+  } catch (error) {
+    console.error('Erro ao listar veículos:', error);
+    res.status(500).json({ erro: 'Erro ao listar veículos.' });
+  }
+};
 
+// Obter veículo por ID
+export const getVeiculoById = async (req, res) => {
+  try {
+    const veiculo = await Veiculo.findById(req.params.id);
+    if (!veiculo) return res.status(404).json({ erro: 'Veículo não encontrado.' });
     res.json(veiculo);
   } catch (error) {
     console.error('Erro ao buscar veículo:', error);
-    res.status(500).json({ erro: 'Erro interno do servidor' });
+    res.status(500).json({ erro: 'Erro ao buscar veículo.' });
   }
 };
 
-const createVeiculo = async (req, res) => {
-  try {
-    // Verificar se req.body existe
-    const veiculoData = req.body;
-    
-    console.log('📦 Dados recebidos:', veiculoData); // DEBUG
-    
-    if (!veiculoData) {
-      return res.status(400).json({ erro: 'Dados do veículo não fornecidos' });
-    }
-
-    //  Verificar se campos obrigatórios existem
-    if (!veiculoData.numPlacaVeic) {
-      return res.status(400).json({ erro: 'Placa do veículo é obrigatória' });
-    }
-
-    // Validar placa única
-    const placaExistente = await Veiculo.findOne({ 
-      numPlacaVeic: veiculoData.numPlacaVeic 
-    });
-    
-    if (placaExistente) {
-      return res.status(400).json({ erro: 'Placa já cadastrada' });
-    }
-
-    // Validar regex da placa (se necessário)
-    const placaRegex = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
-    if (veiculoData.numPlacaVeic && !placaRegex.test(veiculoData.numPlacaVeic)) {
-      return res.status(400).json({ erro: 'Formato de placa inválido. Use: ABC1D23' });
-    }
-
-    const novoVeiculo = new Veiculo(veiculoData);
-    await novoVeiculo.save();
-
-    console.log('✅ Veículo criado:', novoVeiculo._id); // DEBUG
-
-    res.status(201).json(novoVeiculo);
-    
-  } catch (error) {
-    console.error('Erro ao criar veículo:', error);
-    
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({ 
-        erro: 'Erro de validação',
-        detalhes: errors 
-      });
-    }
-    
-    res.status(500).json({ erro: 'Erro interno do servidor' });
-  }
-};
-
-const updateVeiculo = async (req, res) => {
+// Atualizar veículo
+export const updateVeiculo = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const veiculo = await Veiculo.findByIdAndUpdate(id, req.body, { new: true });
+    if (!veiculo) return res.status(404).json({ erro: 'Veículo não encontrado.' });
 
-    const veiculo = await Veiculo.findById(id);
-    if (!veiculo) {
-      return res.status(404).json({ erro: 'Veículo não encontrado' });
-    }
-
-    Object.assign(veiculo, updateData);
-    veiculo.datAtualVeic = new Date();
-    await veiculo.save();
+    await Auditoria.create({
+      idUsuarAudit: req.user.userId,
+      idEntidAudit: veiculo._id,
+      dscTipoEntidAudit: 'Veiculo',
+      dscAcaoAudit: AuditAction.ATUALIZAR,
+      dscDetalAudit: `Veículo ${veiculo.dscModelVeic} atualizado.`,
+      indResultAudit: 'sucesso'
+    });
 
     res.json(veiculo);
   } catch (error) {
     console.error('Erro ao atualizar veículo:', error);
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({ erro: error.message });
-    }
-    res.status(500).json({ erro: 'Erro interno do servidor' });
+    await Auditoria.create({
+      idUsuarAudit: req.user?.userId,
+      dscTipoEntidAudit: 'Veiculo',
+      dscAcaoAudit: AuditAction.ATUALIZAR,
+      dscDetalAudit: error.message,
+      indResultAudit: 'erro'
+    });
+    res.status(500).json({ erro: 'Erro ao atualizar veículo.' });
   }
 };
 
-const deleteVeiculo = async (req, res) => {
+// Excluir veículo
+export const deleteVeiculo = async (req, res) => {
   try {
-    const { id } = req.params;
+    const veiculo = await Veiculo.findByIdAndDelete(req.params.id);
+    if (!veiculo) return res.status(404).json({ erro: 'Veículo não encontrado.' });
 
-    const veiculo = await Veiculo.findById(id);
-    if (!veiculo) {
-      return res.status(404).json({ erro: 'Veículo não encontrado' });
-    }
-
-    // Soft delete
-    veiculo.indStatVeic = 'inativo';
-    veiculo.datAtualVeic = new Date();
-    await veiculo.save();
-
-    res.json({ mensagem: 'Veículo inativado com sucesso' });
-  } catch (error) {
-    console.error('Erro ao inativar veículo:', error);
-    res.status(500).json({ erro: 'Erro interno do servidor' });
-  }
-};
-
-const checkDisponibilidade = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { ini, fim } = req.query;
-
-    if (!ini || !fim) {
-      return res.status(400).json({ erro: 'Datas de início e fim são obrigatórias' });
-    }
-
-    const veiculo = await Veiculo.findById(id);
-    if (!veiculo) {
-      return res.status(404).json({ erro: 'Veículo não encontrado' });
-    }
-
-    res.json({
-      disponivel: true,
-      conflitos: []
+    await Auditoria.create({
+      idUsuarAudit: req.user.userId,
+      idEntidAudit: veiculo._id,
+      dscTipoEntidAudit: 'Veiculo',
+      dscAcaoAudit: AuditAction.EXCLUIR,
+      dscDetalAudit: `Veículo ${veiculo.dscModelVeic} excluído.`,
+      indResultAudit: 'sucesso'
     });
 
+    res.json({ mensagem: 'Veículo removido com sucesso.' });
   } catch (error) {
-    console.error('Erro ao verificar disponibilidade:', error);
-    res.status(500).json({ erro: 'Erro interno do servidor' });
+    console.error('Erro ao excluir veículo:', error);
+    res.status(500).json({ erro: 'Erro ao excluir veículo.' });
   }
-};
-
-export { 
-  getAllVeiculos, 
-  getVeiculo, 
-  createVeiculo, 
-  updateVeiculo, 
-  deleteVeiculo, 
-  checkDisponibilidade 
 };

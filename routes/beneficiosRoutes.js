@@ -1,19 +1,45 @@
-import express from 'express';
-import { 
-  getAllBeneficios, 
-  createBeneficio, 
-  updateBeneficio 
+// routes/beneficiosRoutes.js
+import { Router } from 'express';
+import {
+  criarAlocacao,
+  getAlocacoes,
+  atualizarAlocacao,
+  encerrarAlocacao
 } from '../controllers/beneficiosController.js';
+import { autenticar, autorizar } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
+const router = Router();
 
-// GET /api/v1/beneficios - Listar benefícios com filtros
-router.get('/', getAllBeneficios);
+// listar (pode filtrar por ?vigente=true)
+router.get(
+  '/',
+  autenticar,
+  autorizar('admin', 'gestor_frota'),
+  getAlocacoes
+);
 
-// POST /api/v1/beneficios - Criar benefício (gestor_frota|admin)
-router.post('/', createBeneficio);
+// criar alocação
+router.post(
+  '/',
+  autenticar,
+  autorizar('admin', 'gestor_frota'),
+  criarAlocacao
+);
 
-// PUT /api/v1/beneficios/:id - Atualizar/encerrar benefício
-router.put('/:id', updateBeneficio);
+// atualizar dados da alocação (motorista, fds, local, prioridade)
+router.put(
+  '/:id',
+  autenticar,
+  autorizar('admin', 'gestor_frota'),
+  atualizarAlocacao
+);
+
+// encerrar
+router.post(
+  '/:id/encerrar',
+  autenticar,
+  autorizar('admin', 'gestor_frota'),
+  encerrarAlocacao
+);
 
 export default router;

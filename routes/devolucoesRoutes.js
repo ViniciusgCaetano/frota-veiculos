@@ -1,9 +1,13 @@
-import express from 'express';
-import { createDevolucao } from '../controllers/devolucoesController.js';
+import { Router } from 'express';
+import { registrarDevolucao, getDevolucoes } from '../controllers/devolucoesController.js';
+import { autenticar } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
+const router = Router();
 
-// POST /api/v1/devolucoes - Registrar devolução
-router.post('/', createDevolucao);
+// listar devoluções
+router.get('/', autenticar, getDevolucoes);
+
+// registrar devolução
+router.post('/', autenticar, registrarDevolucao);
 
 export default router;

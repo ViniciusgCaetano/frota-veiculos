@@ -1,131 +1,248 @@
+// controllers/beneficiosController.js
 import Alocacao from '../models/Alocacao.js';
+import Veiculo from '../models/Veiculo.js';
+import Usuario from '../models/Usuario.js';
 import Auditoria from '../models/Auditoria.js';
 
-const getAllBeneficios = async (req, res) => {
-    try {
-        const { usuario_id, vigente } = req.query;
+const AuditAction = Object.freeze({
+  CRIAR: 'ALOCACAO_CRIAR',
+  ATUALIZAR: 'ALOCACAO_ATUALIZAR',
+  ENCERRAR: 'ALOCACAO_ENCERRAR'
+});
 
-        const filter = {};
-        if (usuario_id) filter.idUsuarAloc = usuario_id;
-        if (vigente === 'true') filter.indVigenAloc = true;
+// POST /api/v1/beneficios
+export const criarAlocacao = async (req, res) => {
+  try {
+    const {
+      idUsuarAloc,
+      idVeicAloc,
+      idMotExclAloc,
+      indFdsAloc,
+      dscLocalEstacAloc,
+      numPriorAloc,
+      dscJustfAloc,
+      datInicioAloc,
+      datFimAloc
+    } = req.body;
 
-        const beneficios = await Alocacao.find(filter)
-            .populate('idUsuarAloc', 'nomUsuar dscEmailUsuar indPerfUsuar')
-            .populate('idVeicAloc', 'dscFabrcVeic dscModelVeic numPlacaVeic indStatVeic')
-            .sort({ datInicAloc: -1 });
-
-        res.json(beneficios);
-    } catch (error) {
-        console.error('Erro ao buscar benefícios:', error);
-        res.status(500).json({ erro: 'Erro interno do servidor' });
+    // 1) validar usuário
+    const usuario = await Usuario.findById(idUsuarAloc);
+    if (!usuario) {
+      return res.status(404).json({ erro: 'Usuário beneficiado não encontrado.' });
     }
+
+    // 2) validar veículo
+    const veic = await Veiculo.findById(idVeicAloc);
+    if (!veic) {
+      return res.status(404).json({ erro: 'Veículo não encontrado.' });
+    }
+
+    // 3) impedir 2 alocações ativas para o mesmo usuário
+    const existeAlocUsuario = await Alocacao.findOne({
+      idUsuarAloc,
+      indStatAloc: 'ativa'
+    });
+    if (existeAlocUsuario) {
+      return res.status(400).json({ erro: 'Usuário já possui alocação ativa.' });
+    }
+
+    // 4) impedir 2 alocações ativas para o mesmo veículo
+    const existeAlocVeiculo = await Alocacao.findOne({
+      idVeicAloc,
+      indStatAloc: 'ativa'
+    });
+    if (existeAlocVeiculo) {
+      return res.status(400).json({ erro: 'Veículo já está alocado para outro usuário.' });
+    }
+
+    // 5) se informar motorista exclusivo, validar
+    let motoristaDoc = null;
+    if (idMotExclAloc) {
+      motoristaDoc = await Usuario.findById(idMotExclAloc);
+      if (!motoristaDoc) {
+        return res.status(400).json({ erro: 'Motorista exclusivo informado não existe.' });
+      }
+    }
+
+    // 6) criar alocação
+    const alocacao = await Alocacao.create({
+      idUsuarAloc,
+      idVeicAloc,
+      idMotExclAloc: idMotExclAloc || undefined,
+      indFdsAloc: typeof indFdsAloc === 'boolean' ? indFdsAloc : false,
+      dscLocalEstacAloc: dscLocalEstacAloc || '',
+      numPriorAloc: typeof numPriorAloc === 'number' ? numPriorAloc : 0,
+      dscJustfAloc: dscJustfAloc || '',
+      datInicioAloc: datInicioAloc ? new Date(datInicioAloc) : new Date(),
+      datFimAloc: datFimAloc ? new Date(datFimAloc) : undefined,
+      indStatAloc: 'ativa',
+      datCriAloc: new Date(),
+      datAtualAloc: new Date()
+    });
+
+    // 7) marcar veículo como reservado/alocado
+    veic.indStatVeic = 'reservado';
+    await veic.save();
+
+    // 8) auditoria
+    await Auditoria.create({
+      idUsuarAudit: req.user.userId,
+      idEntidAudit: alocacao._id,
+      dscTipoEntidAudit: 'Alocacao',
+      dscAcaoAudit: AuditAction.CRIAR,
+      dscDetalAudit: `Veículo ${veic.dscModelVeic} (${veic.dscPlacaVeic}) alocado para usuário ${usuario.nomUsuar}.`,
+      indResultAudit: 'sucesso'
+    });
+
+    return res.status(201).json(alocacao);
+  } catch (error) {
+    console.error('Erro ao criar alocação:', error);
+    // auditoria de erro sem idEntid
+    await Auditoria.create({
+      idUsuarAudit: req.user?.userId,
+      dscTipoEntidAudit: 'Alocacao',
+      dscAcaoAudit: AuditAction.CRIAR,
+      dscDetalAudit: error.message,
+      indResultAudit: 'erro'
+    });
+    return res.status(500).json({ erro: 'Erro ao criar alocação.' });
+  }
 };
 
-const createBeneficio = async (req, res) => {
-    try {
-        // Verificar perfil (gestor_frota ou admin)
-        if (!['gestor_frota', 'admin'].includes(req.user.perfil)) {
-            return res.status(403).json({ erro: 'Permissão negada' });
-        }
+// GET /api/v1/beneficios
+// suporta ?vigente=true e ?usuario=<id>
+export const getAlocacoes = async (req, res) => {
+  try {
+    const { vigente, usuario } = req.query;
 
-        const beneficioData = req.body;
-
-        // Validação: apenas 1 benefício vigente por usuário
-        if (beneficioData.indVigenAloc !== false) {
-            const beneficioVigente = await Alocacao.findOne({
-                idUsuarAloc: beneficioData.idUsuarAloc,
-                indVigenAloc: true
-            });
-            if (beneficioVigente) {
-                return res.status(400).json({ erro: 'Usuário já possui um benefício vigente' });
-            }
-        }
-
-        // Validação: apenas 1 benefício vigente por veículo
-        if (beneficioData.indVigenAloc !== false) {
-            const veiculoAlocado = await Alocacao.findOne({
-                idVeicAloc: beneficioData.idVeicAloc,
-                indVigenAloc: true
-            });
-            if (veiculoAlocado) {
-                return res.status(400).json({ erro: 'Veículo já alocado para outro usuário' });
-            }
-        }
-
-        // Validação: datFimAloc >= datInicAloc
-        if (beneficioData.datFimAloc && beneficioData.datInicAloc) {
-            if (new Date(beneficioData.datFimAloc) < new Date(beneficioData.datInicAloc)) {
-                return res.status(400).json({ erro: 'Data fim não pode ser anterior à data início' });
-            }
-        }
-
-        const novoBeneficio = new Alocacao(beneficioData);
-        await novoBeneficio.save();
-
-        // Popular referências para retorno
-        await novoBeneficio.populate('idUsuarAloc', 'nomUsuar dscEmailUsuar');
-        await novoBeneficio.populate('idVeicAloc', 'dscFabrcVeic dscModelVeic numPlacaVeic');
-
-        // Auditoria
-        await Auditoria.create({
-            idUsuarAudit: req.user.userId,
-            idEntidAudit: novoBeneficio._id,
-            dscTipoEntidAudit: 'Alocacao',
-            dscAcaoAudit: 'ALOCACAO_CRIADA',
-            dscDetalAudit: `Benefício criado para usuário ${novoBeneficio.idUsuarAloc.nomUsuar}`
-        });
-
-        res.status(201).json(novoBeneficio);
-    } catch (error) {
-        console.error('Erro ao criar benefício:', error);
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({ erro: error.message });
-        }
-        res.status(500).json({ erro: 'Erro interno do servidor' });
+    const filter = {};
+    if (vigente === 'true') {
+      filter.indStatAloc = 'ativa';
     }
+    if (usuario) {
+      filter.idUsuarAloc = usuario;
+    }
+
+    const alocacoes = await Alocacao.find(filter)
+      .populate('idUsuarAloc', 'nomUsuar dscEmailUsuar indPerfUsuar')
+      .populate('idVeicAloc', 'dscModelVeic dscPlacaVeic dscTipoVeic')
+      .populate('idMotExclAloc', 'nomUsuar dscEmailUsuar')
+      .sort({ datCriAloc: -1 });
+
+    return res.json(alocacoes);
+  } catch (error) {
+    console.error('Erro ao listar alocações:', error);
+    return res.status(500).json({ erro: 'Erro ao listar alocações.' });
+  }
 };
 
-const updateBeneficio = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updateData = req.body;
+// PUT /api/v1/beneficios/:id
+// atualizar metadados da alocação (motorista, fds, local, prioridade, justificativa)
+export const atualizarAlocacao = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      idMotExclAloc,
+      indFdsAloc,
+      dscLocalEstacAloc,
+      numPriorAloc,
+      dscJustfAloc,
+      datFimAloc
+    } = req.body;
 
-        const beneficio = await Alocacao.findById(id);
-        if (!beneficio) {
-            return res.status(404).json({ erro: 'Benefício não encontrado' });
-        }
-
-        // Se estiver encerrando a vigência
-        if (updateData.indVigenAloc === false) {
-            updateData.datFimAloc = new Date();
-            updateData.indVigenAloc = false;
-        }
-
-        Object.assign(beneficio, updateData);
-        beneficio.datAtualAloc = new Date();
-        await beneficio.save();
-
-        // Popular para retorno
-        await beneficio.populate('idUsuarAloc', 'nomUsuar dscEmailUsuar');
-        await beneficio.populate('idVeicAloc', 'dscFabrcVeic dscModelVeic numPlacaVeic');
-
-        // Auditoria
-        await Auditoria.create({
-            idUsuarAudit: req.user.userId,
-            idEntidAudit: beneficio._id,
-            dscTipoEntidAudit: 'Alocacao',
-            dscAcaoAudit: 'ALOCACAO_ATUALIZADA',
-            dscDetalAudit: `Benefício atualizado para usuário ${beneficio.idUsuarAloc.nomUsuar}`
-        });
-
-        res.json(beneficio);
-    } catch (error) {
-        console.error('Erro ao atualizar benefício:', error);
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({ erro: error.message });
-        }
-        res.status(500).json({ erro: 'Erro interno do servidor' });
+    const aloc = await Alocacao.findById(id);
+    if (!aloc) {
+      return res.status(404).json({ erro: 'Alocação não encontrada.' });
     }
+
+    // se veio motorista, validar
+    if (idMotExclAloc) {
+      const mot = await Usuario.findById(idMotExclAloc);
+      if (!mot) {
+        return res.status(400).json({ erro: 'Motorista exclusivo informado não existe.' });
+      }
+      aloc.idMotExclAloc = idMotExclAloc;
+    } else if (idMotExclAloc === null) {
+      // se quiser permitir remover motorista
+      aloc.idMotExclAloc = undefined;
+    }
+
+    if (typeof indFdsAloc === 'boolean') {
+      aloc.indFdsAloc = indFdsAloc;
+    }
+    if (typeof dscLocalEstacAloc === 'string') {
+      aloc.dscLocalEstacAloc = dscLocalEstacAloc;
+    }
+    if (typeof numPriorAloc === 'number') {
+      aloc.numPriorAloc = numPriorAloc;
+    }
+    if (typeof dscJustfAloc === 'string') {
+      aloc.dscJustfAloc = dscJustfAloc;
+    }
+    if (datFimAloc) {
+      aloc.datFimAloc = new Date(datFimAloc);
+    }
+
+    aloc.datAtualAloc = new Date();
+
+    await aloc.save();
+
+    await Auditoria.create({
+      idUsuarAudit: req.user.userId,
+      idEntidAudit: aloc._id,
+      dscTipoEntidAudit: 'Alocacao',
+      dscAcaoAudit: AuditAction.ATUALIZAR,
+      dscDetalAudit: `Alocação atualizada (motorista/fds/local/prioridade).`,
+      indResultAudit: 'sucesso'
+    });
+
+    return res.json(aloc);
+  } catch (error) {
+    console.error('Erro ao atualizar alocação:', error);
+    return res.status(500).json({ erro: 'Erro ao atualizar alocação.' });
+  }
 };
 
-export { getAllBeneficios, createBeneficio, updateBeneficio };
+// POST /api/v1/beneficios/:id/encerrar
+export const encerrarAlocacao = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const aloc = await Alocacao.findById(id).populate('idVeicAloc');
+    if (!aloc) {
+      return res.status(404).json({ erro: 'Alocação não encontrada.' });
+    }
+
+    // já encerrada?
+    if (aloc.indStatAloc === 'encerrada') {
+      return res.status(400).json({ erro: 'Alocação já está encerrada.' });
+    }
+
+    aloc.indStatAloc = 'encerrada';
+    aloc.datFimAloc = new Date();
+    aloc.datAtualAloc = new Date();
+    await aloc.save();
+
+    // liberar veículo
+    if (aloc.idVeicAloc?._id) {
+      const veic = await Veiculo.findById(aloc.idVeicAloc._id);
+      if (veic) {
+        veic.indStatVeic = 'disponivel';
+        await veic.save();
+      }
+    }
+
+    await Auditoria.create({
+      idUsuarAudit: req.user.userId,
+      idEntidAudit: aloc._id,
+      dscTipoEntidAudit: 'Alocacao',
+      dscAcaoAudit: AuditAction.ENCERRAR,
+      dscDetalAudit: `Alocação do veículo encerrada.`,
+      indResultAudit: 'sucesso'
+    });
+
+    return res.json(aloc);
+  } catch (error) {
+    console.error('Erro ao encerrar alocação:', error);
+    return res.status(500).json({ erro: 'Erro ao encerrar alocação.' });
+  }
+};

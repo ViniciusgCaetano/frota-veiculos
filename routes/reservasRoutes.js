@@ -1,23 +1,32 @@
-import express from 'express';
-import { 
-  getAllReservas, 
-  createReserva, 
-  processDecisao, 
-  cancelReserva 
+import { Router } from 'express';
+import {
+  createReserva,
+  getReservas,
+  aprovarReserva,
+  rejeitarReserva,
+  cancelarReserva,
+  deleteReserva
 } from '../controllers/reservasController.js';
+import { autenticar, autorizar } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
+const router = Router();
 
-// GET /api/v1/reservas - Listar reservas com filtros
-router.get('/', getAllReservas);
+// listar reservas
+router.get('/', autenticar, getReservas);
 
-// POST /api/v1/reservas - Criar reserva (solicitante autenticado)
-router.post('/', createReserva);
+// criar
+router.post('/', autenticar, createReserva);
 
-// POST /api/v1/reservas/:id/decisao - Aprovar/rejeitar reserva (supervisor)
-router.post('/:id/decisao', processDecisao);
+// aprovar
+router.post('/:id/aprovar', autenticar, autorizar('supervisor', 'gestor_frota', 'admin'), aprovarReserva);
 
-// POST /api/v1/reservas/:id/cancelar - Cancelar reserva
-router.post('/:id/cancelar', cancelReserva);
+// rejeitar
+router.post('/:id/rejeitar', autenticar, autorizar('supervisor', 'gestor_frota', 'admin'), rejeitarReserva);
+
+// cancelar e DELETAR (vai apagar do banco)
+router.post('/:id/cancelar', autenticar, cancelarReserva);
+
+// delete direto (pra usar no front com DELETE)
+router.delete('/:id', autenticar, autorizar('admin', 'gestor_frota', 'supervisor'), deleteReserva);
 
 export default router;

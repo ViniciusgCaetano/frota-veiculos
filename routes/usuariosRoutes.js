@@ -1,12 +1,24 @@
-import express from 'express';
-import { createUsuario, getAllUsuarios } from '../controllers/usuariosController.js';
+import { Router } from 'express';
+import {
+  createUsuario,
+  getAllUsuarios,
+  updateUsuario,
+  deleteUsuario
+} from '../controllers/usuariosController.js';
+import { autenticar, autorizar } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
+const router = Router();
 
-// GET /api/v1/usuarios - Listar usuários (apenas admin)
-router.get('/', getAllUsuarios);
+// lista usuários (admin, gestor_frota, supervisor podem ver)
+router.get('/', autenticar, getAllUsuarios);
 
-// POST /api/v1/usuarios - Criar usuário (apenas admin)
-router.post('/', createUsuario);
+// cria usuário (só admin)
+router.post('/', autenticar, autorizar('admin'), createUsuario);
+
+// atualiza usuário (admin)
+router.put('/:id', autenticar, autorizar('admin'), updateUsuario);
+
+// remove usuário (admin)
+router.delete('/:id', autenticar, autorizar('admin'), deleteUsuario);
 
 export default router;

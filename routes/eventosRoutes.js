@@ -1,15 +1,20 @@
-import express from 'express';
-import { 
-  getAllEventos, 
-  createEvento 
+import { Router } from 'express';
+import {
+  registrarEvento,
+  getEventos,
+  getEventoById
 } from '../controllers/eventosController.js';
+import { autenticar, autorizar } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
+const router = Router();
 
-// GET /api/v1/eventos - Listar eventos com filtros
-router.get('/', getAllEventos);
+// listar eventos
+router.get('/', autenticar, autorizar('admin', 'gestor_frota'), getEventos);
 
-// POST /api/v1/eventos - Criar evento (gestor_frota|admin)
-router.post('/', createEvento);
+// obter evento
+router.get('/:id', autenticar, autorizar('admin', 'gestor_frota'), getEventoById);
+
+// registrar evento (gestor_frota, admin)
+router.post('/', autenticar, autorizar('admin', 'gestor_frota'), registrarEvento);
 
 export default router;

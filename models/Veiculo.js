@@ -1,79 +1,52 @@
 import mongoose from 'mongoose';
 
-const documentoSubschema = new mongoose.Schema({
-  indTipoDoc: { 
-    type: String, 
-    required: true,
-    enum: ['CRLV', 'Seguro', 'Manual', 'Laudo', 'Outro']
-  },
-  dscUrlDoc: { type: String },
-  dscArqDoc: { type: String },
-  datValDoc: { type: Date }
-}, { _id: true });
+const veiculoSchema = new mongoose.Schema(
+  {
+    dscFabricVeic: { type: String, required: true },
+    dscModelVeic: { type: String, required: true },
 
-const estadoSubschema = new mongoose.Schema({
-  numHodoVeic: { type: Number, min: 0 },
-  dscObsVeic: { type: String }
-});
+    // novo: tipo do veículo (carro, moto, van, trator, barco...)
+    dscTipoVeic: {
+      type: String,
+      enum: ['carro', 'moto', 'van', 'triciclo', 'trator', 'barco', 'aviao_pequeno', 'outro'],
+      default: 'carro'
+    },
 
-const restricaoSubschema = new mongoose.Schema({
-  numRodizVeic: { type: Number, min: 1, max: 7 }
-});
+    dscCorVeic: { type: String },
 
-const veiculoSchema = new mongoose.Schema({
-  // Identificação básica
-  idTipoVeic: { 
-    type: String, 
-    required: true,
-    enum: ['carro', 'moto', 'van', 'triciclo', 'trator', 'barco', 'aviao_pequeno']
-  },
-  dscFabrcVeic: { type: String, required: true },
-  dscModelVeic: { type: String, required: true },
-  numAnoModVeic: { type: Number, min: 1900 },
-  dscCorVeic: { type: String },
-  
-  // Características técnicas
-  numPlacaVeic: { 
-    type: String, 
-    required: true, 
-    unique: true,  // REMOVER schema.index() duplicado
-    index: true
-  },
-  idCombVeic: { 
-    type: String, 
-    required: true,
-    enum: ['gasolina', 'etanol', 'diesel', 'flex', 'eletrico', 'hibrido', 'gnv', 'outro']
-  },
-  qtdPortaVeic: { type: Number, min: 0 },
-  dscOpcVeic: [{ type: String }],
-  
-  // Status e classificação
-  indStatVeic: { 
-    type: String, 
-    required: true,
-    enum: ['ativo', 'inativo', 'manutencao', 'sinistrado', 'vendido'],
-    default: 'ativo'
-  },
-  indHabilVeic: { 
-    type: String, 
-    enum: ['A', 'B', 'C', 'D', 'E', null],
-    default: null
-  },
-  
-  // Estado atual e restrições
-  dscEstadVeic: estadoSubschema,
-  dscRestrVeic: restricaoSubschema,
-  
-  // Documentos
-  Documento: [documentoSubschema],
-  
-  // Auditoria
-  datCriVeic: { type: Date, default: Date.now },
-  datAtualVeic: { type: Date, default: Date.now }
-}, { collection: 'Veiculo' });
+    // se você quiser permitir veículo sem placa (barco, trator), pode tirar o required daqui
+    dscPlacaVeic: { type: String, required: true, unique: true },
 
-// MANTER APENAS ESTES INDEXES (remover duplicatas)
-veiculoSchema.index({ indStatVeic: 1, datCriVeic: -1 });
-veiculoSchema.index({ idTipoVeic: 1, indStatVeic: 1 });
+    dscCombustVeic: {
+      type: String,
+      enum: ['gasolina', 'etanol', 'diesel', 'elétrico', 'híbrido'],
+      required: true
+    },
+
+    qtdPortaVeic: { type: Number },
+
+    // lista de opcionais
+    dscOpcionVeic: [{ type: String }],
+
+    // restrições de uso (rodízio, só fim de semana, só para diretoria...)
+    dscRestrVeic: { type: String },
+
+    // habilitação necessária
+    dscTipoHabVeic: { type: String },
+
+    indStatVeic: {
+      type: String,
+      enum: ['disponivel', 'reservado', 'em_manutencao', 'indisponivel'],
+      default: 'disponivel'
+    },
+
+    datCriVeic: { type: Date, default: Date.now },
+    datAtualVeic: { type: Date, default: Date.now }
+  },
+  { collection: 'Veiculo' }
+);
+
+// índice pra placa
+veiculoSchema.index({ dscPlacaVeic: 1 });
 
 export default mongoose.model('Veiculo', veiculoSchema, 'Veiculo');

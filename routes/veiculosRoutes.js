@@ -1,31 +1,28 @@
-import express from 'express';
-import { 
-  getAllVeiculos, 
-  getVeiculo, 
-  createVeiculo, 
-  updateVeiculo, 
-  deleteVeiculo,
-  checkDisponibilidade 
+import { Router } from 'express';
+import {
+  createVeiculo,
+  getVeiculos,
+  getVeiculoById,
+  updateVeiculo,
+  deleteVeiculo
 } from '../controllers/veiculosController.js';
+import { autenticar, autorizar } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
+const router = Router();
 
-// GET /api/v1/veiculos - Lista paginada com filtros
-router.get('/', getAllVeiculos);
+// listar veículos (todo mundo logado)
+router.get('/', autenticar, getVeiculos);
 
-// POST /api/v1/veiculos - Criar novo veículo (gestor_frota|admin)
-router.post('/', createVeiculo);
+// pegar veículo
+router.get('/:id', autenticar, getVeiculoById);
 
-// GET /api/v1/veiculos/:id - Buscar veículo por ID
-router.get('/:id', getVeiculo);
+// criar veículo (gestor de frota ou admin)
+router.post('/', autenticar, autorizar('gestor_frota', 'admin'), createVeiculo);
 
-// PUT /api/v1/veiculos/:id - Atualizar veículo
-router.put('/:id', updateVeiculo);
+// atualizar veículo
+router.put('/:id', autenticar, autorizar('gestor_frota', 'admin'), updateVeiculo);
 
-// DELETE /api/v1/veiculos/:id - Soft delete (muda status para inativo)
-router.delete('/:id', deleteVeiculo);
-
-// GET /api/v1/veiculos/:id/disponibilidade - Verificar disponibilidade
-router.get('/:id/disponibilidade', checkDisponibilidade);
+// excluir
+router.delete('/:id', autenticar, autorizar('admin'), deleteVeiculo);
 
 export default router;

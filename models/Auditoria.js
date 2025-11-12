@@ -1,30 +1,24 @@
 import mongoose from 'mongoose';
 
 const auditoriaSchema = new mongoose.Schema({
-  idUsuarAudit: { type: mongoose.Schema.Types.ObjectId, ref: 'Usuario' },
+  idUsuarAudit: { type: mongoose.Schema.Types.ObjectId, ref: 'Usuario', required: true },
   idEntidAudit: { type: mongoose.Schema.Types.ObjectId, required: true },
-  dscTipoEntidAudit: { 
-    type: String, 
-    required: true,
-    enum: ['Reserva', 'Veiculo', 'Alocacao', 'Evento', 'Devolucao', 'Usuario']
-  },
-  dscAcaoAudit: { 
-    type: String, 
-    required: true,
+  dscTipoEntidAudit: { type: String, required: true },
+  dscAcaoAudit: {
+    type: String,
     enum: [
-      'RESERVA_ABERTA', 'RESERVA_APROVADA', 'RESERVA_REJEITADA', 
-      'RESERVA_CANCELADA', 'RESERVA_CONCLUIDA', 'VEICULO_CRIADO',
-      'VEICULO_ATUALIZADO', 'VEICULO_INATIVADO', 'ALOCACAO_CRIADA',
-      'ALOCACAO_ENCERRADA', 'EVENTO_REGISTRADO', 'DEVOLUCAO_REGISTRADA'
-    ]
+      'USUARIO_CRIAR', 'USUARIO_ATUALIZAR', 'USUARIO_EXCLUIR',
+      'VEICULO_CRIAR', 'VEICULO_ATUALIZAR', 'VEICULO_EXCLUIR',
+      'RESERVA_CRIAR', 'RESERVA_APROVAR', 'RESERVA_REJEITAR', 'RESERVA_CANCELAR',
+      'DEVOLUCAO_REGISTRAR',
+      'EVENTO_REGISTRAR', 'USUARIO_LOGIN', 'ATUALIZACAO_USUARIO', `ALOCACAO_CRIAR`, 'ALOCACAO_ENCERRAR'
+    ],
+    required: true
   },
   dscDetalAudit: { type: String },
+  indResultAudit: { type: String, enum: ['sucesso', 'erro'], default: 'sucesso' },
   datCriAudit: { type: Date, default: Date.now }
 }, { collection: 'Auditoria' });
 
-// Indexes
-auditoriaSchema.index({ dscTipoEntidAudit: 1, idEntidAudit: 1 });
-auditoriaSchema.index({ datCriAudit: -1 });
-auditoriaSchema.index({ idUsuarAudit: 1, datCriAudit: -1 });
-
+auditoriaSchema.index({ dscTipoEntidAudit: 1, dscAcaoAudit: 1 });
 export default mongoose.model('Auditoria', auditoriaSchema, 'Auditoria');

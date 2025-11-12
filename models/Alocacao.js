@@ -1,36 +1,19 @@
 import mongoose from 'mongoose';
 
 const alocacaoSchema = new mongoose.Schema({
-  idUsuarAloc: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Usuario', 
-    required: true 
-  },
-  idVeicAloc: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Veiculo', 
-    required: true 
-  },
-  datInicAloc: { type: Date, required: true },
+  idUsuarAloc: { type: mongoose.Schema.Types.ObjectId, ref: 'Usuario', required: true },
+  idVeicAloc: { type: mongoose.Schema.Types.ObjectId, ref: 'Veiculo', required: true },
+  idMotExclAloc: { type: mongoose.Schema.Types.ObjectId, ref: 'Usuario' },
+  indFdsAloc: { type: Boolean, default: false },
+  dscLocalEstacAloc: { type: String },
+  datInicioAloc: { type: Date, required: true },
   datFimAloc: { type: Date },
-  indVigenAloc: { type: Boolean, default: true },
-  
-  // Auditoria
+  numPriorAloc: { type: Number, default: 0 },
+  indStatAloc: { type: String, enum: ['ativa', 'encerrada'], default: 'ativa' },
   datCriAloc: { type: Date, default: Date.now },
-  datAtualAloc: { type: Date, default: Date.now }
+  datAtualAloc: { type: Date, default: Date.now },
+  dscJustfAloc: { type: String }
 }, { collection: 'Alocacao' });
 
-// ESTES INDEXES ESTÃO CORRETOS (não usam unique + index no campo)
-alocacaoSchema.index({ idUsuarAloc: 1, indVigenAloc: 1 }, { 
-  unique: true, 
-  partialFilterExpression: { indVigenAloc: true } 
-});
-
-alocacaoSchema.index({ idVeicAloc: 1, indVigenAloc: 1 }, { 
-  unique: true, 
-  partialFilterExpression: { indVigenAloc: true } 
-});
-
-alocacaoSchema.index({ indVigenAloc: 1, datFimAloc: 1 });
-
+alocacaoSchema.index({ idUsuarAloc: 1, idVeicAloc: 1 });
 export default mongoose.model('Alocacao', alocacaoSchema, 'Alocacao');
